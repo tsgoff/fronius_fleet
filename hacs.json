@@ -1,0 +1,6 @@
+{
+  "name": "Fronius Solar.web Fleet",
+  "render_readme": true,
+  "filename": "fronius_fleet",
+  "country": ["AT", "DE"]
+}

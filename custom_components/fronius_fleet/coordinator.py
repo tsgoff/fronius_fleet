@@ -71,10 +71,27 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         data['password'] = self.password
         data['chkRemember'] = 'on'
         
-        # 5. Submit login form (allow_redirects=True will handle the callback automatically)
+        # 5. Submit login form
         resp3 = await self.session.post(post_url, data=data, allow_redirects=True)
-        if "login.fronius.com" in str(resp3.url):
+        if "login.fronius.com" in str(resp3.url) and "retry" in str(resp3.url):
             raise ValueError("Login failed - check credentials")
+            
+        # 6. Check if we got an auto-submit form for the callback
+        text3 = await resp3.text()
+        soup3 = bs4.BeautifulSoup(text3, 'html.parser')
+        form3 = soup3.find('form')
+        if form3:
+            post_url3 = form3.get('action')
+            if not post_url3.startswith("http"):
+                post_url3 = "https://login.fronius.com" + post_url3
+            post_data3 = {}
+            for input_tag in form3.find_all('input'):
+                name = input_tag.get('name')
+                if name:
+                    post_data3[name] = input_tag.get('value', '')
+            
+            # 7. Post the callback to Solar.web
+            await self.session.post(post_url3, data=post_data3, allow_redirects=True)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via Solar.web."""

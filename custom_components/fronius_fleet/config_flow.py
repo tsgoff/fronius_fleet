@@ -58,12 +58,24 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     post_data['password'] = data[CONF_PASSWORD]
     post_data['chkRemember'] = 'on'
     
-    async with session.post(post_url, data=post_data, headers=headers, allow_redirects=True) as response:
-        content = await response.text()
-        # If the login fails, it typically redirects back to the login form or shows an error.
-        # We can check if we were redirected to Solar.web or if we are still on login.fronius.com
-        if "login.fronius.com" in str(response.url):
-            raise ValueError("invalid_auth")
+    resp3 = await session.post(post_url, data=post_data, headers=headers, allow_redirects=True)
+    if "login.fronius.com" in str(resp3.url) and "retry" in str(resp3.url):
+        raise ValueError("invalid_auth")
+        
+    text3 = await resp3.text()
+    soup3 = bs4.BeautifulSoup(text3, 'html.parser')
+    form3 = soup3.find('form')
+    if form3:
+        post_url3 = form3.get('action')
+        if not post_url3.startswith("http"):
+            post_url3 = "https://login.fronius.com" + post_url3
+        post_data3 = {}
+        for input_tag in form3.find_all('input'):
+            name = input_tag.get('name')
+            if name:
+                post_data3[name] = input_tag.get('value', '')
+        
+        await session.post(post_url3, data=post_data3, headers=headers, allow_redirects=True)
 
     return {"title": "Fronius Solar.web Fleet"}
 

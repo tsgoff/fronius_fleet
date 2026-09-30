@@ -7,6 +7,6 @@
   "documentation": "https://github.com/your-username/fronius_fleet",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/your-username/fronius_fleet/issues",
-  "requirements": [],
+  "requirements": ["beautifulsoup4"],
   "version": "1.0.0"
 }

@@ -23,20 +23,46 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     """Validate the user input allows us to connect."""
     session = async_create_clientsession(hass)
     
-    # We do a test login to verify credentials
-    login_url = "https://www.solarweb.com/Account/Login"
-    payload = {
-        "Email": data[CONF_USERNAME],
-        "Password": data[CONF_PASSWORD],
-        "RememberMe": "true"
-    }
+    import bs4
+    # We do a test login to verify credentials using the new OIDC flow
+    login_start_url = "https://www.solarweb.com/Account/ExternalLogin"
+    resp1 = await session.get(login_start_url, allow_redirects=False)
+    auth_url = resp1.headers.get("Location")
+    if not auth_url:
+        raise ValueError("unknown")
+
+    resp2 = await session.get(auth_url)
+    text = await resp2.text()
     
-    async with session.post(login_url, data=payload) as response:
-        # Solar.web redirects on successful login or sets specific cookies.
-        # Simple check: if login failed, they usually render the same page with errors.
+    soup = bs4.BeautifulSoup(text, 'html.parser')
+    form = soup.find('form', id='loginForm') or soup.find('form')
+    if not form:
+        raise ValueError("unknown")
+
+    action = form.get('action')
+    post_url = "https://login.fronius.com" + action.replace('../', '/')
+    
+    post_data = {}
+    for input_tag in form.find_all('input'):
+        name = input_tag.get('name')
+        if name:
+            post_data[name] = input_tag.get('value', '')
+            
+    post_data['usernameUserInput'] = data[CONF_USERNAME]
+    post_data['username'] = data[CONF_USERNAME]
+    post_data['password'] = data[CONF_PASSWORD]
+    post_data['chkRemember'] = 'on'
+    
+    async with session.post(post_url, data=post_data, allow_redirects=True) as response:
         content = await response.text()
-        if "Benutzername oder Passwort ist nicht korrekt" in content or "Incorrect email or password" in content:
-            raise ValueError("invalid_auth")
+        # If the login fails, it typically redirects back to the login form or shows an error.
+        # We can check if we were redirected to Solar.web or if we are still on login.fronius.com
+        if "login.fronius.com" in str(response.url):
+            if "Benutzername oder Passwort ist nicht korrekt" in content or "Incorrect email or password" in content or "login-failed" in str(response.url):
+                raise ValueError("invalid_auth")
+            else:
+                # Some other auth error
+                raise ValueError("invalid_auth")
 
     return {"title": "Fronius Solar.web Fleet"}
 

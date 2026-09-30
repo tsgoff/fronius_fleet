@@ -31,17 +31,43 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _login(self):
-        """Login to Solar.web to get session cookies."""
-        login_url = "https://www.solarweb.com/Account/Login"
-        # Optional: GET first to get CSRF tokens if needed, but often POST is enough
-        await self.session.get(login_url)
+        """Login to Solar.web via Fronius Identity Provider to get session cookies."""
+        import bs4
         
-        payload = {
-            "Email": self.username,
-            "Password": self.password,
-            "RememberMe": "true"
-        }
-        await self.session.post(login_url, data=payload)
+        login_start_url = "https://www.solarweb.com/Account/ExternalLogin"
+        # 1. Start login flow, get redirect to OIDC
+        resp1 = await self.session.get(login_start_url, allow_redirects=False)
+        auth_url = resp1.headers.get("Location")
+        if not auth_url:
+            raise ValueError("OIDC Auth URL not found in Location header")
+
+        # 2. Get the login page from login.fronius.com
+        resp2 = await self.session.get(auth_url)
+        text = await resp2.text()
+        
+        soup = bs4.BeautifulSoup(text, 'html.parser')
+        form = soup.find('form', id='loginForm') or soup.find('form')
+        if not form:
+            raise ValueError("Login form not found on login.fronius.com")
+
+        # 3. Extract hidden fields (sessionDataKey, authenticators, etc.)
+        action = form.get('action')
+        post_url = "https://login.fronius.com" + action.replace('../', '/')
+        
+        data = {}
+        for input_tag in form.find_all('input'):
+            name = input_tag.get('name')
+            if name:
+                data[name] = input_tag.get('value', '')
+                
+        # 4. Fill in credentials
+        data['usernameUserInput'] = self.username
+        data['username'] = self.username
+        data['password'] = self.password
+        data['chkRemember'] = 'on'
+        
+        # 5. Submit login form (allow_redirects=True will handle the callback automatically)
+        await self.session.post(post_url, data=data, allow_redirects=True)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via Solar.web."""

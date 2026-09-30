@@ -37,17 +37,16 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
         }
-        self.session.headers.update(headers)
 
         login_start_url = "https://www.solarweb.com/Account/ExternalLogin"
         # 1. Start login flow, get redirect to OIDC
-        resp1 = await self.session.get(login_start_url, allow_redirects=False)
+        resp1 = await self.session.get(login_start_url, headers=headers, allow_redirects=False)
         auth_url = resp1.headers.get("Location")
         if not auth_url:
             raise ValueError("OIDC Auth URL not found in Location header")
 
         # 2. Get the login page from login.fronius.com
-        resp2 = await self.session.get(auth_url)
+        resp2 = await self.session.get(auth_url, headers=headers)
         text = await resp2.text()
         
         soup = bs4.BeautifulSoup(text, 'html.parser')
@@ -72,7 +71,7 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         data['chkRemember'] = 'on'
         
         # 5. Submit login form
-        resp3 = await self.session.post(post_url, data=data, allow_redirects=True)
+        resp3 = await self.session.post(post_url, data=data, headers=headers, allow_redirects=True)
         if "login.fronius.com" in str(resp3.url) and "retry" in str(resp3.url):
             raise ValueError("Login failed - check credentials")
             
@@ -91,27 +90,26 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
                     post_data3[name] = input_tag.get('value', '')
             
             # 7. Post the callback to Solar.web
-            await self.session.post(post_url3, data=post_data3, allow_redirects=True)
+            await self.session.post(post_url3, data=post_data3, headers=headers, allow_redirects=True)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via Solar.web."""
         data_url = "https://www.solarweb.com/ActualData/GetActualValues?withOnlineState=True"
         list_url = "https://www.solarweb.com/PvSystems/GetPvSystemsForListView"
         
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+        
         try:
-            response = await self.session.get(
-                data_url, 
-                headers={"X-Requested-With": "XMLHttpRequest"}
-            )
+            response = await self.session.get(data_url, headers=headers)
             
             # If we are redirected to login, or unauthorized, try to login again
-            if response.status != 200 or "Account/Login" in str(response.url):
+            if response.status != 200 or "Account/Login" in str(response.url) or "login" in str(response.url).lower():
                 _LOGGER.debug("Session expired or missing, logging in again.")
                 await self._login()
-                response = await self.session.get(
-                    data_url, 
-                    headers={"X-Requested-With": "XMLHttpRequest"}
-                )
+                response = await self.session.get(data_url, headers=headers)
 
             response.raise_for_status()
             items = await response.json()
@@ -134,10 +132,7 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
                     total_energy_wh += float(energy)
 
             # Fetch list view for today's energy
-            list_response = await self.session.get(
-                list_url,
-                headers={"X-Requested-With": "XMLHttpRequest"}
-            )
+            list_response = await self.session.get(list_url, headers=headers)
             list_response.raise_for_status()
             list_data = await list_response.json()
             

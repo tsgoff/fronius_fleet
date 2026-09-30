@@ -24,14 +24,19 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     session = async_create_clientsession(hass)
     
     import bs4
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
+    }
+
     # We do a test login to verify credentials using the new OIDC flow
     login_start_url = "https://www.solarweb.com/Account/ExternalLogin"
-    resp1 = await session.get(login_start_url, allow_redirects=False)
+    resp1 = await session.get(login_start_url, headers=headers, allow_redirects=False)
     auth_url = resp1.headers.get("Location")
     if not auth_url:
         raise ValueError("unknown")
 
-    resp2 = await session.get(auth_url)
+    resp2 = await session.get(auth_url, headers=headers)
     text = await resp2.text()
     
     soup = bs4.BeautifulSoup(text, 'html.parser')
@@ -53,16 +58,12 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     post_data['password'] = data[CONF_PASSWORD]
     post_data['chkRemember'] = 'on'
     
-    async with session.post(post_url, data=post_data, allow_redirects=True) as response:
+    async with session.post(post_url, data=post_data, headers=headers, allow_redirects=True) as response:
         content = await response.text()
         # If the login fails, it typically redirects back to the login form or shows an error.
         # We can check if we were redirected to Solar.web or if we are still on login.fronius.com
         if "login.fronius.com" in str(response.url):
-            if "Benutzername oder Passwort ist nicht korrekt" in content or "Incorrect email or password" in content or "login-failed" in str(response.url):
-                raise ValueError("invalid_auth")
-            else:
-                # Some other auth error
-                raise ValueError("invalid_auth")
+            raise ValueError("invalid_auth")
 
     return {"title": "Fronius Solar.web Fleet"}
 

@@ -34,6 +34,11 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         """Login to Solar.web via Fronius Identity Provider to get session cookies."""
         import bs4
         
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
+        }
+        self.session.headers.update(headers)
+
         login_start_url = "https://www.solarweb.com/Account/ExternalLogin"
         # 1. Start login flow, get redirect to OIDC
         resp1 = await self.session.get(login_start_url, allow_redirects=False)
@@ -67,7 +72,9 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         data['chkRemember'] = 'on'
         
         # 5. Submit login form (allow_redirects=True will handle the callback automatically)
-        await self.session.post(post_url, data=data, allow_redirects=True)
+        resp3 = await self.session.post(post_url, data=data, allow_redirects=True)
+        if "login.fronius.com" in str(resp3.url):
+            raise ValueError("Login failed - check credentials")
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via Solar.web."""

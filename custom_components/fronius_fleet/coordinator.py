@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .auth import resolve_login_url
 from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         auth_url = resp1.headers.get("Location")
         if not auth_url:
             raise ValueError("OIDC Auth URL not found in Location header")
+        auth_url = resolve_login_url(str(resp1.url), auth_url)
 
         # 2. Get the login page from login.fronius.com
         resp2 = await self.session.get(auth_url, headers=headers)
@@ -56,7 +58,7 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
 
         # 3. Extract hidden fields (sessionDataKey, authenticators, etc.)
         action = form.get('action')
-        post_url = "https://login.fronius.com" + action.replace('../', '/')
+        post_url = resolve_login_url(str(resp2.url), action)
         
         data = {}
         for input_tag in form.find_all('input'):
@@ -80,9 +82,7 @@ class FroniusFleetDataUpdateCoordinator(DataUpdateCoordinator):
         soup3 = bs4.BeautifulSoup(text3, 'html.parser')
         form3 = soup3.find('form')
         if form3:
-            post_url3 = form3.get('action')
-            if not post_url3.startswith("http"):
-                post_url3 = "https://login.fronius.com" + post_url3
+            post_url3 = resolve_login_url(str(resp3.url), form3.get('action'))
             post_data3 = {}
             for input_tag in form3.find_all('input'):
                 name = input_tag.get('name')

@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
+from .auth import resolve_login_url
 from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     auth_url = resp1.headers.get("Location")
     if not auth_url:
         raise ValueError("unknown")
+    auth_url = resolve_login_url(str(resp1.url), auth_url)
 
     resp2 = await session.get(auth_url, headers=headers)
     text = await resp2.text()
@@ -45,7 +47,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         raise ValueError("unknown")
 
     action = form.get('action')
-    post_url = "https://login.fronius.com" + action.replace('../', '/')
+    post_url = resolve_login_url(str(resp2.url), action)
     
     post_data = {}
     for input_tag in form.find_all('input'):
@@ -66,9 +68,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     soup3 = bs4.BeautifulSoup(text3, 'html.parser')
     form3 = soup3.find('form')
     if form3:
-        post_url3 = form3.get('action')
-        if not post_url3.startswith("http"):
-            post_url3 = "https://login.fronius.com" + post_url3
+        post_url3 = resolve_login_url(str(resp3.url), form3.get('action'))
         post_data3 = {}
         for input_tag in form3.find_all('input'):
             name = input_tag.get('name')

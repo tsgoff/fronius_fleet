@@ -1,6 +1,15 @@
 # Fronius Solar.web Fleet - Home Assistant Integration
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="custom_components/fronius_fleet/brand/dark_icon@2x.png">
+  <img src="custom_components/fronius_fleet/brand/icon@2x.png" alt="Solar.web Fleet: a rising sun above three solar panels" width="160" height="160">
+</picture>
+
 This is a custom component for Home Assistant to integrate with Fronius Solar.web Fleet.
+
+The integration includes its own icon for light and dark themes, supported by
+Home Assistant 2026.3 and later. This is an unofficial integration; its icon is
+not an official Fronius or Home Assistant logo.
 
 ## Installation
 
